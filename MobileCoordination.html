@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Mobile Coordination Test - Rotary & Tracks</title>
+    <title>Prueba de Coordinación Bimanual (Móvil)</title>
     <style>
         :root {
             --bg: #222; /* Darker outer bg */
@@ -11,7 +11,7 @@
             --surface: #ffffff;
             --primary: #3b82f6;
             --error: #FF0000;
-            --car: #808080; /* Grey metallic */
+            --car: #666666; /* Grey metallic */
             --text: #333;
             --knob-bg: #d1d5db;
             --knob-stroke: #4b5563;
@@ -88,7 +88,7 @@
             font-size: 16px;
             font-family: monospace;
             font-weight: bold;
-            padding: 2px 4px;
+            padding: 2px 8px;
             border: 1px solid #ccc;
             border-radius: 4px;
             background-color: #f9fafb;
@@ -181,6 +181,39 @@
             background-color: var(--bg);
             touch-action: none;
         }
+
+        /* End Screen Styling */
+        #endScreen {
+            display: none;
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.85);
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 300;
+            color: white;
+            text-align: center;
+            padding: 20px;
+        }
+
+        #endScreen h1 {
+            font-size: 44px;
+            margin-bottom: 10px;
+            color: #ef4444; /* Red color for FIN DEL JUEGO */
+            text-shadow: 2px 2px 8px rgba(0,0,0,0.8);
+        }
+
+        #endScreen p {
+            font-size: 24px;
+            margin-bottom: 30px;
+        }
+
+        #finalErrors {
+            font-weight: bold;
+            color: #ef4444;
+            font-size: 32px;
+        }
         
     </style>
 </head>
@@ -189,34 +222,27 @@
     <div id="topBar">
         <div class="score-board">
             <div class="stat-group">
-                <span class="stat-label">Level</span>
+                <span class="stat-label">NIVEL</span>
                 <select id="levelSelect" class="level-select">
                     <option value="1">1</option>
                     <option value="2">2</option>
                     <option value="3">3</option>
-                    <option value="4">4</option>
-                    <option value="5">5</option>
-                    <option value="6">6</option>
-                    <option value="7">7</option>
-                    <option value="8">8</option>
-                    <option value="9">9</option>
-                    <option value="10">10</option>
                 </select>
             </div>
             <div class="stat-group">
-                <span class="stat-label">Timer</span>
+                <span class="stat-label">TIEMPO</span>
                 <span class="stat-value" id="timeVal">00:00</span>
             </div>
             <div class="stat-group">
-                <span class="stat-label">Errors</span>
+                <span class="stat-label">ERRORES</span>
                 <span class="stat-value error-value" id="errorVal">0</span>
             </div>
         </div>
         
         <div class="control-buttons">
-            <button id="startBtn" class="btn btn-start">Start</button>
-            <button id="stopBtn" class="btn btn-stop active">Stop</button>
-            <button id="resetBtn" class="btn btn-reset">Reset</button>
+            <button id="startBtn" class="btn btn-start">INICIAR</button>
+            <button id="stopBtn" class="btn btn-stop active">PARAR</button>
+            <button id="resetBtn" class="btn btn-reset">REINICIAR</button>
         </div>
     </div>
 
@@ -228,6 +254,13 @@
         <canvas id="simCanvas"></canvas>
         <!-- 40% Knobs -->
         <canvas id="knobCanvas"></canvas>
+    </div>
+
+    <!-- 60 Seconds End Screen -->
+    <div id="endScreen">
+        <h1>FIN DEL JUEGO</h1>
+        <p>Errores totales: <span id="finalErrors">0</span></p>
+        <button class="btn btn-primary" id="endRestartBtn" style="font-size: 22px; padding: 15px 40px; border-radius: 12px; background-color: #3b82f6; width: auto; margin-top: 10px;">REINTENTAR</button>
     </div>
 
 <script>
@@ -245,26 +278,30 @@
     const stopBtn = document.getElementById('stopBtn');
     const resetBtn = document.getElementById('resetBtn');
 
+    const endScreen = document.getElementById('endScreen');
+    const endRestartBtn = document.getElementById('endRestartBtn');
+
     // EXPLICIT GAME STATE
     let isPaused = true; 
     let timer = 0;
     let errors = 0;
     let level = 1;
     let lastTime = 0;
+    let isScreenFlashing = false;
+    let reqId = null;
     
     // Engine Constants
     let playerBaseY = 0;
     let leftTrackBaseX = 0;
     let rightTrackBaseX = 0;
+    
     const config = {
         playerMaxSpeed: 300,       
         playerFriction: 0.88,      
         rotarySensitivity: 6.0,    // Multiplier for sliding distance
-        trackStartWidth: 120,      
-        trackMinWidth: 70,         
-        narrowingRate: 0.15,        
-        scrollSpeed: 16.0,         
-        carRadius: 15,
+        trackWidth: 120,           // Match balanced difficulty of desktop
+        baseScrollSpeed: 72,       // Level 1 base speed exactly like desktop
+        carRadius: 22,             // Grey circular cars like desktop
         
         // Knob Graphic Specs
         knobRadius: 0 // Calculated dynamically
@@ -306,6 +343,31 @@
         oscillator.stop(audioCtx.currentTime + 0.1);
     }
 
+    // Dynamic scroll speed based on Level (Exact parity with desktop)
+    function getCurrentScrollSpeed() {
+        if (level === 1) return config.baseScrollSpeed;
+        if (level === 2) return config.baseScrollSpeed * 1.4; // 40% faster
+        if (level === 3) return config.baseScrollSpeed * 1.8; // 80% faster
+        return config.baseScrollSpeed;
+    }
+
+    // Vector mapping: Time/Distance along the track combines elapsed time (scrolling) + screen Y position
+    function getTrackTime(screenY, elapsed) {
+        // Track scrolls DOWN, so points visually higher on screen are "further" along the track
+        // The track origin (t=0) starts at the cars (playerBaseY) when elapsed=0
+        const trackY = (screenY - playerBaseY) + elapsed * getCurrentScrollSpeed();
+        return trackY * 0.005; // Base frequency scaling
+    }
+
+    // Smooth 'flowy' paths (copied from desktop UX balance)
+    function getLeftTrackOffset(t) {
+        return Math.sin(t) * 50 + Math.sin(t * 2.3 + 2) * 30 + Math.cos(t * 0.7) * 20;
+    }
+
+    function getRightTrackOffset(t) {
+        return Math.sin(t * 1.2 + 5) * 55 + Math.cos(t * 0.8 + 1) * 35 + Math.sin(t * 2.5) * 15;
+    }
+
     // --- GEOMETRY SETUP ---
     function resizeCanvas() {
         trackCanvas.width = trackCanvas.clientWidth;
@@ -317,10 +379,8 @@
         leftTrackBaseX = trackCanvas.width * 0.25;
         rightTrackBaseX = trackCanvas.width * 0.75;
         
-        // Target: "Cars must be perfectly centered at the top of the white tracks"
-        // Dynamically measure the topBar height so cars spawn VISIBLY just below the physical UI layer
-        const topBarHeight = document.getElementById('topBar').offsetHeight || 120;
-        playerBaseY = topBarHeight + 35; 
+        // Target: "Cars stay fixed at the vertical CENTER of the screen (track canvas height / 2)"
+        playerBaseY = trackCanvas.height / 2; 
         
         // Knob positioning
         config.knobRadius = Math.min(knobCanvas.width * 0.2, knobCanvas.height * 0.4);
@@ -331,9 +391,9 @@
 
         // Secure initial positioning explicitly aligned with the dead-center of the tracks
         if (carLeft.x === 0 || isPaused) {
-            const trackVerticalTimePos = timer * ((config.scrollSpeed * Math.pow(1.15, level - 1)) / 10);
-            carLeft.x = leftTrackBaseX + getLeftTrackOffset(trackVerticalTimePos);
-            carRight.x = rightTrackBaseX + getRightTrackOffset(trackVerticalTimePos);
+            const tStart = getTrackTime(playerBaseY, timer);
+            carLeft.x = leftTrackBaseX + getLeftTrackOffset(tStart);
+            carRight.x = rightTrackBaseX + getRightTrackOffset(tStart);
             carLeft.y = playerBaseY;
             carRight.y = playerBaseY;
         }
@@ -404,22 +464,6 @@
     }, {passive: false});
     document.addEventListener('touchmove', (e) => e.preventDefault(), {passive: false});
 
-    // --- TRACK GENERATION ---
-    // Increased velocity/curve level multiplier to 1.25 so difficulty select is extremely prominent
-    function getLeftTrackOffset(timeSecs) {
-        const t = timeSecs * Math.pow(1.25, level - 1);
-        return Math.sin(t * 0.15) * (trackCanvas.width * 0.08) 
-             + Math.sin(t * 0.3 + 2) * (trackCanvas.width * 0.06)
-             + Math.cos(t * 0.4) * (trackCanvas.width * 0.03);
-    }
-
-    function getRightTrackOffset(timeSecs) {
-        const t = timeSecs * Math.pow(1.25, level - 1);
-        return Math.sin(t * 0.12 + 5) * (trackCanvas.width * 0.09) 
-             + Math.cos(t * 0.25 + 1) * (trackCanvas.width * 0.05)
-             + Math.sin(t * 0.45) * (trackCanvas.width * 0.03);
-    }
-
     // --- LEVEL SELECTOR AND BUTTON LOGIC ---
     levelSelect.addEventListener('change', (e) => {
         level = parseInt(e.target.value);
@@ -427,6 +471,7 @@
     });
 
     startBtn.addEventListener('click', () => {
+        if (!isPaused) return; // Prevent multiple clicks
         isPaused = false;
         startBtn.classList.add('active'); 
         stopBtn.classList.remove('active'); 
@@ -435,15 +480,33 @@
         // Boot audio context on intentional user interaction if needed
         if(audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
         
-        requestAnimationFrame(gameLoop);
+        if (reqId) cancelAnimationFrame(reqId);
+        reqId = requestAnimationFrame(gameLoop);
     });
 
+    function showEndScreen() {
+        isPaused = true;
+        stopBtn.classList.add('active');  
+        startBtn.classList.remove('active'); 
+        if (reqId) cancelAnimationFrame(reqId);
+        reqId = null;
+        
+        isScreenFlashing = false;
+        drawAllStatic(); // Draw pristine final state frame
+        
+        endScreen.style.display = 'flex';
+        document.getElementById('finalErrors').innerText = errors;
+    }
+
     stopBtn.addEventListener('click', () => {
+        if (isPaused) return;
         isPaused = true;                
         stopBtn.classList.add('active');  
         startBtn.classList.remove('active'); 
         carLeft.vx = 0;
         carRight.vx = 0;
+        if (reqId) cancelAnimationFrame(reqId);
+        reqId = null;
         drawAllStatic();
     });
 
@@ -452,17 +515,24 @@
         stopBtn.classList.add('active');
         startBtn.classList.remove('active');
         
+        if (reqId) cancelAnimationFrame(reqId);
+        reqId = null;
+
         timer = 0;
         errors = 0;
+        isScreenFlashing = false;
+        endScreen.style.display = 'none';
         
         // If the selector was manually changed, persist that level, else standard reset logic
-        level = parseInt(levelSelect.value);
+        level = parseInt(levelSelect.value) || 1;
 
-        // Snap perfectly centered to the 0.0 top base of the tracks
-        carLeft.x = leftTrackBaseX + getLeftTrackOffset(0);
-        carRight.x = rightTrackBaseX + getRightTrackOffset(0);
+        // Snap perfectly centered to the 0.0 top base of the tracks at elapsed 0
+        const tStart = getTrackTime(playerBaseY, 0);
+        carLeft.x = leftTrackBaseX + getLeftTrackOffset(tStart);
+        carRight.x = rightTrackBaseX + getRightTrackOffset(tStart);
         carLeft.y = playerBaseY;
         carRight.y = playerBaseY;
+        
         carLeft.vx = 0;
         carRight.vx = 0;
         carLeft.isOutOfBounds = false;
@@ -483,7 +553,12 @@
         drawAllStatic();
     });
 
+    endRestartBtn.addEventListener('click', () => {
+        resetBtn.click();
+    });
+
     function formatTime(seconds) {
+        if (seconds >= 60) return "01:00"; // Exact string formatting
         const m = Math.floor(seconds / 60).toString().padStart(2, '0');
         const s = Math.floor(seconds % 60).toString().padStart(2, '0');
         return `${m}:${s}`;
@@ -499,10 +574,13 @@
         
         timer += dt;
 
-        let newLevel = Math.floor(timer / 30) + 1;
-        if (newLevel > level && newLevel <= 10) {
-            level = newLevel;
-            levelSelect.value = level.toString();
+        // Check exactly 60 seconds limit
+        if (timer >= 60) {
+            timer = 60;
+            timeVal.innerText = formatTime(timer);
+            errorVal.innerText = errors;
+            showEndScreen();
+            return;
         }
 
         // --- CAR PHYSICS ---
@@ -514,7 +592,7 @@
         carRight.vx = Math.max(-config.playerMaxSpeed, Math.min(config.playerMaxSpeed, carRight.vx));
         carRight.x += carRight.vx * dt;
 
-        // Force Constraints 
+        // Force Constraints (Canvas edge limiters)
         const midPoint = trackCanvas.width / 2;
         if (carLeft.x < config.carRadius) { carLeft.x = config.carRadius; carLeft.vx = 0; }
         if (carLeft.x > midPoint - config.carRadius) { carLeft.x = midPoint - config.carRadius; carLeft.vx = 0; }
@@ -522,14 +600,14 @@
         if (carRight.x < midPoint + config.carRadius) { carRight.x = midPoint + config.carRadius; carRight.vx = 0; }
         if (carRight.x > trackCanvas.width - config.carRadius) { carRight.x = trackCanvas.width - config.carRadius; carRight.vx = 0; }
 
-        // Evaluation Logics
-        const speedMult = Math.pow(1.15, level - 1);
-        const trackVerticalTimePos = timer * ((config.scrollSpeed * speedMult) / 10); 
-        const idealWidth = Math.max(config.trackMinWidth, config.trackStartWidth - (timer * config.narrowingRate));
-
-        const lxCenter = leftTrackBaseX + getLeftTrackOffset(trackVerticalTimePos);
-        const rxCenter = rightTrackBaseX + getRightTrackOffset(trackVerticalTimePos);
-        const halfWidth = idealWidth / 2;
+        // Evaluation Logics - Detect Error if circle is extending past white track 
+        const tLeft = getTrackTime(carLeft.y, timer);
+        const lxCenter = leftTrackBaseX + getLeftTrackOffset(tLeft);
+        
+        const tRight = getTrackTime(carRight.y, timer);
+        const rxCenter = rightTrackBaseX + getRightTrackOffset(tRight);
+        
+        const halfWidth = config.trackWidth / 2;
         
         carLeft.isOutOfBounds = Math.abs(carLeft.x - lxCenter) + config.carRadius > halfWidth;
         carRight.isOutOfBounds = Math.abs(carRight.x - rxCenter) + config.carRadius > halfWidth;
@@ -554,16 +632,18 @@
         carLeft.wasOutOfBounds = carLeft.isOutOfBounds;
         carRight.wasOutOfBounds = carRight.isOutOfBounds;
         
-        // Exact Y-position locks
+        // Exact Fixed Camera Y-position locks (Double check)
         carLeft.y = playerBaseY;
         carRight.y = playerBaseY;
+        
+        isScreenFlashing = carLeft.isOutOfBounds || carRight.isOutOfBounds;
 
         drawAllStatic();
 
         timeVal.innerText = formatTime(timer);
         errorVal.innerText = errors;
 
-        requestAnimationFrame(gameLoop);
+        reqId = requestAnimationFrame(gameLoop);
     }
 
     function drawAllStatic() {
@@ -575,41 +655,45 @@
     function drawTrackArea() {
         trackCtx.clearRect(0,0, trackCanvas.width, trackCanvas.height);
         
-        // REQUIREMENT 2: Solid Dark Blue (#00008b) Background
-        trackCtx.fillStyle = '#00008b'; 
+        // Background: Red flash, otherwise dark blue
+        trackCtx.fillStyle = isScreenFlashing ? '#FF0000' : '#00008B'; 
         trackCtx.fillRect(0, 0, trackCanvas.width, trackCanvas.height);
 
-        const speedMult = Math.pow(1.15, level - 1);
-        const trackVerticalTimePos = timer * ((config.scrollSpeed * speedMult) / 10);
-        const idealWidth = Math.max(config.trackMinWidth, config.trackStartWidth - (timer * config.narrowingRate));
-
-        drawTrack(leftTrackBaseX, getLeftTrackOffset, idealWidth, trackVerticalTimePos);
-        drawTrack(rightTrackBaseX, getRightTrackOffset, idealWidth, trackVerticalTimePos);
+        drawTrack(leftTrackBaseX, getLeftTrackOffset, config.trackWidth);
+        drawTrack(rightTrackBaseX, getRightTrackOffset, config.trackWidth);
 
         drawVehicle(carLeft);
         drawVehicle(carRight);
     }
 
-    function drawTrack(baseX, offsetFunc, baseWidth, baseTimePos) {
+    function drawTrack(baseX, offsetFunc, baseWidth) {
         trackCtx.beginPath();
         const ptsLeft = [], ptsRight = [];
-        const lookaheadScale = 0.08; 
         
-        // NOTE ON VISIBILITY: Loop deep enough to ensure solid path cover
-        for (let y = -20; y <= trackCanvas.height + 20; y += 15) { 
-            const dy = playerBaseY - y;
-            const timeSample = baseTimePos + (dy * lookaheadScale);
-            const cx = baseX + offsetFunc(timeSample);
-            const wl = (baseWidth / 2);
-            const wr = (baseWidth / 2);
+        // Track scrolls DOWN, so we generate points from top to bottom
+        // Max distance the track will travel over 60s
+        const maxScrollDist = 60 * getCurrentScrollSpeed();
 
-            ptsLeft.push({ x: cx - wl, y: y });
-            ptsRight.push({ x: cx + wr, y: y });
+        for (let y = -40; y <= trackCanvas.height + 40; y += 10) { 
+            const trackDist = (y - playerBaseY) + timer * getCurrentScrollSpeed();
+            
+            // Finite track limit
+            let cappedDist = trackDist;
+            if (cappedDist > maxScrollDist) {
+                cappedDist = maxScrollDist;
+            } else if (cappedDist < 0) {
+                cappedDist = 0; // Solid track segment coming into view
+            }
+
+            const t = cappedDist * 0.005;
+            const cx = baseX + offsetFunc(t);
+
+            ptsLeft.push({ x: cx - baseWidth/2, y: y });
+            ptsRight.push({ x: cx + baseWidth/2, y: y });
         }
 
         if (ptsLeft.length === 0) return;
 
-        // REQUIREMENT 2/6: Explicit ctx.fill() for white paths
         trackCtx.fillStyle = '#FFFFFF';
         trackCtx.beginPath();
         trackCtx.moveTo(ptsLeft[0].x, ptsLeft[0].y);
@@ -619,10 +703,9 @@
         trackCtx.fill();
     }
 
-    // REQUIREMENT 1/3: Visible Dark Metallic Grey with Black Borders
     function drawVehicle(car) {
-        const isError = car.isOutOfBounds;
-        trackCtx.fillStyle = isError ? '#FF0000' : '#6b7280'; // Explicit Grey Metallic '#6b7280', Red on fail
+        // Cars are ALWAYS dark metallic grey with black borders
+        trackCtx.fillStyle = '#666666'; 
         trackCtx.beginPath();
         trackCtx.arc(car.x, car.y, config.carRadius, 0, Math.PI * 2);
         trackCtx.fill();
@@ -632,25 +715,20 @@
     }
 
     // --- 2. KNOB AREA RENDER ---
-    // REQUIREMENT 1: Re-implemented rotary knobs perfect rendering
+    // (Existing untouched logic for handling mobile knob visuals)
     function drawKnobArea() {
         knobCtx.clearRect(0,0, knobCanvas.width, knobCanvas.height);
         
-        // Background of lower section
         knobCtx.fillStyle = 'var(--bg)';
         knobCtx.fillRect(0, 0, knobCanvas.width, knobCanvas.height);
 
-        // Draw Left Knob
         renderRotaryKnob(knobLeft.x, knobLeft.y, knobLeft.angle, "L");
-        
-        // Draw Right Knob
         renderRotaryKnob(knobRight.x, knobRight.y, knobRight.angle, "R");
     }
 
     function renderRotaryKnob(x, y, angle, label) {
         const r = config.knobRadius;
         
-        // 1. Outer Ring Base (Grey Circular Knob)
         knobCtx.beginPath();
         knobCtx.arc(x, y, r, 0, Math.PI*2);
         knobCtx.fillStyle = 'var(--knob-bg)';
@@ -659,7 +737,6 @@
         knobCtx.strokeStyle = 'var(--knob-stroke)';
         knobCtx.stroke();
 
-        // 2. Inner Dial Graphic
         knobCtx.beginPath();
         knobCtx.arc(x, y, r * 0.7, 0, Math.PI*2);
         knobCtx.fillStyle = '#e5e7eb';
@@ -668,24 +745,21 @@
         knobCtx.strokeStyle = '#9ca3af';
         knobCtx.stroke();
         
-        // 3. Label (L / R)
         knobCtx.fillStyle = 'rgba(0,0,0,0.2)';
         knobCtx.font = "bold 30px sans-serif";
         knobCtx.textAlign = "center";
         knobCtx.textBaseline = "middle";
         knobCtx.fillText(label, x, y);
 
-        // 4. Indicator Point (Shows horizontal sliding rotation)
         knobCtx.save();
         knobCtx.translate(x, y);
         knobCtx.rotate(angle);
         
         knobCtx.beginPath();
-        // The Indicator Dot
         knobCtx.arc(0, -r * 0.85, r * 0.15, 0, Math.PI*2);
         knobCtx.fillStyle = '#1f2937';
         knobCtx.fill();
-        // The Indicator Line
+        
         knobCtx.beginPath();
         knobCtx.moveTo(0, 0);
         knobCtx.lineTo(0, -r * 0.7);
