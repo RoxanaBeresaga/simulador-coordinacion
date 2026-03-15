@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bimanual Coordination Test</title>
+    <style>
+        :root {
+            --bg: #0000FF;
+            --surface: #ffffff;
+            --primary: #3b82f6;
+            --error: #FF0000;
+            --car: #808080;
+            --text: #333;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #222; /* Darker outer bg to pop the blue canvas */
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        #topBar {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            z-index: 5;
+        }
+
+        /* The White Scoreboard Box */
+        .score-board {
+            background-color: var(--surface);
+            border-radius: 12px;
+            padding: 10px 40px;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            display: flex;
+            gap: 40px;
+        }
+
+        .stat-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .stat-label {
+            font-size: 14px;
+            font-weight: bold;
+            color: #666;
+            text-transform: uppercase;
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-family: monospace;
+            font-weight: bold;
+            color: var(--text);
+        }
+
+        .error-value {
+            color: var(--error);
+        }
+
+        .control-buttons {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .btn {
+            background-color: var(--primary);
+            color: white;
+            border: 2px solid rgba(255,255,255,0.2);
+            padding: 8px 16px;
+            font-size: 14px;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.1s, background-color 0.2s;
+            text-transform: uppercase;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        }
+
+        .btn:hover { background-color: #2563eb; transform: translateY(-2px); }
+        .btn:active { transform: translateY(0); }
+
+        .btn-stop { background-color: #ef4444; }
+        .btn-stop:hover { background-color: #dc2626; }
+
+        .btn-reset { background-color: #6b7280; }
+        .btn-reset:hover { background-color: #4b5563; }
+
+        #canvasWrapper {
+            position: relative;
+            width: 800px;
+            height: 600px;
+            background-color: var(--bg); /* Deep Blue Background Fallback */
+            margin-top: 150px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+            border: 4px solid var(--surface);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            background-color: var(--bg); /* Ensure Canvas itself gets Deep Blue */
+        }
+
+        #overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 255, 0.85); /* Semi-transparent blue overlay for start screen */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+        }
+
+        h1 {
+            margin: 0 0 10px 0;
+            font-size: 36px;
+            font-weight: bold;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+
+        .instructions {
+            color: #e5e7eb;
+            line-height: 1.6;
+            text-align: center;
+            max-width: 450px;
+            margin-bottom: 30px;
+            font-size: 16px;
+        }
+
+        .keys-info {
+            display: flex;
+            gap: 50px;
+            margin-bottom: 40px;
+            color: white;
+        }
+        
+        .hand-controls {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .hand-label {
+            font-weight: bold;
+            letter-spacing: 1px;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+        }
+
+        kbd {
+            background-color: white;
+            border-radius: 6px;
+            padding: 6px 14px;
+            font-family: monospace;
+            font-size: 18px;
+            color: black;
+            font-weight: bold;
+            box-shadow: 0 4px 0 #ccc;
+        }
+
+        .countdown {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 100px;
+            font-family: monospace;
+            font-weight: bold;
+            color: white;
+            text-shadow: 0 0 40px rgba(255, 255, 255, 0.8), 4px 4px 0px rgba(0,0,0,0.3);
+            z-index: 20;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="topBar">
+        <div class="score-board">
+            <div class="stat-group">
+                <span class="stat-label">Level</span>
+                <span class="stat-value" id="levelVal">1</span>
+            </div>
+            <div class="stat-group">
+                <span class="stat-label">Timer</span>
+                <span class="stat-value" id="timeVal">00:00</span>
+            </div>
+            <div class="stat-group">
+                <span class="stat-label">Errors</span>
+                <span class="stat-value error-value" id="errorVal">0</span>
+            </div>
+        </div>
+        
+        <div class="control-buttons">
+            <select id="levelSelect" class="btn" style="background-color: var(--surface); color: var(--text); border: 2px solid var(--primary); outline: none;">
+                <option value="1">Level 1</option>
+                <option value="2">Level 2</option>
+                <option value="3">Level 3</option>
+                <option value="4">Level 4</option>
+                <option value="5">Level 5</option>
+                <option value="6">Level 6</option>
+                <option value="7">Level 7</option>
+                <option value="8">Level 8</option>
+                <option value="9">Level 9</option>
+                <option value="10">Level 10</option>
+            </select>
+            <button id="nextLevelBtn" class="btn" style="background-color: #f59e0b; border-color: #f59e0b;">Next Level</button>
+            <button id="startControlBtn" class="btn">Start</button>
+            <button id="stopControlBtn" class="btn btn-stop">Stop</button>
+            <button id="resetControlBtn" class="btn btn-reset">Reset</button>
+        </div>
+    </div>
+
+    <div id="canvasWrapper">
+        <canvas id="simCanvas" width="800" height="600"></canvas>
+        
+        <div id="countdownDisplay" class="countdown">3</div>
+        
+        <div id="overlay">
+            <div id="startScreen">
+                <h1>Bimanual Coordination</h1>
+                <p class="instructions">
+                    Keep the circles inside their respective tracks. The scroll is extremely slow but the paths are chaotic and asynchronous.
+                </p>
+                <div class="keys-info">
+                    <div class="hand-controls">
+                        <span class="hand-label">LEFT HAND</span>
+                        <div><kbd>A</kbd> <kbd>D</kbd></div>
+                    </div>
+                    <div class="hand-controls">
+                        <span class="hand-label">RIGHT HAND</span>
+                        <div><kbd>◀</kbd> <kbd>▶</kbd></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+    const canvas = document.getElementById('simCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    // UI Elements
+    const levelVal = document.getElementById('levelVal');
+    const timeVal = document.getElementById('timeVal');
+    const errorVal = document.getElementById('errorVal');
+    const levelSelect = document.getElementById('levelSelect');
+    const nextLevelBtn = document.getElementById('nextLevelBtn');
+    const startControlBtn = document.getElementById('startControlBtn');
+    const stopControlBtn = document.getElementById('stopControlBtn');
+    const resetControlBtn = document.getElementById('resetControlBtn');
+    const overlay = document.getElementById('overlay');
+    const startScreen = document.getElementById('startScreen');
+    const countdownDisplay = document.getElementById('countdownDisplay');
+    
+    // Core state
+    let state = 'IDLE'; // IDLE, COUNTDOWN, RUNNING, ENDED
+    let currentLevel = 1;
+    let countdownValue = 3;
+    let reqId = null;
+    let startTime = 0;
+    let lastTime = 0;
+    let elapsedTime = 0;
+    let errors = 0;
+    let dt = 0;
+
+    // Configuration constraints (Psychocar exact replication - Smooth Wavy)
+    const config = {
+        playerBaseY: 450,
+        playerMaxSpeed: 140,       // Very low top speed for precision
+        playerAccel: 300,          // Slow acceleration for micro-adjustments
+        playerFriction: 0.88,      // Smooth, natural deceleration amount per frame
+        trackStartWidth: 160,      // Wide White tracks
+        trackMinWidth: 120,        // Narrowest they get over time
+        narrowingRate: 0.3,        // Narrows slowly over time
+        leftTrackBaseX: 230,       
+        rightTrackBaseX: 570,
+        scrollSpeed: 16.0,         // Slightly faster but still very slow vertical descent pace
+        carRadius: 22              // Large Grey Circles
+    };
+
+    // Actors (Circles)
+    const leftDot = { x: config.leftTrackBaseX, y: config.playerBaseY, vx: 0, radius: config.carRadius, isOutOfBounds: false, wasOutOfBounds: false };
+    const rightDot = { x: config.rightTrackBaseX, y: config.playerBaseY, vx: 0, radius: config.carRadius, isOutOfBounds: false, wasOutOfBounds: false };
+
+    // Input state tracking
+    const keys = { KeyA: false, KeyD: false, ArrowLeft: false, ArrowRight: false };
+
+    window.addEventListener('keydown', (e) => {
+        if (keys.hasOwnProperty(e.code)) {
+            keys[e.code] = true;
+            if(state === 'RUNNING' && ["ArrowLeft","ArrowRight","ArrowUp","ArrowDown","Space","Enter"].indexOf(e.code) > -1) {
+                e.preventDefault();
+            }
+        }
+    });
+
+    window.addEventListener('keyup', (e) => {
+        if (keys.hasOwnProperty(e.code)) {
+            keys[e.code] = false;
+        }
+    });
+
+    // Format time to MM:SS
+    function formatTime(seconds) {
+        const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+        const s = Math.floor(seconds % 60).toString().padStart(2, '0');
+        return `${m}:${s}`;
+    }
+
+    // Smooth, low-frequency layered sine waves for organic drifting
+    function getLeftTrackOffset(timeSecs) {
+        const freqMult = Math.pow(1.15, currentLevel - 1);
+        const t = timeSecs * freqMult;
+        // Slow overlapping waves create unpredictable but smooth drifting
+        return Math.sin(t * 0.15) * 60 
+             + Math.sin(t * 0.3 + 2) * 45
+             + Math.cos(t * 0.4) * 25;
+    }
+
+    function getRightTrackOffset(timeSecs) {
+        const freqMult = Math.pow(1.15, currentLevel - 1);
+        const t = timeSecs * freqMult;
+        // Completely different phases and frequencies for independent, asynchronous behavior
+        return Math.sin(t * 0.12 + 5) * 65 
+             + Math.cos(t * 0.25 + 1) * 40
+             + Math.sin(t * 0.45) * 20;
+    }
+
+    function resetToIdle(keepLevel = false) {
+        state = 'IDLE';
+        if (reqId) cancelAnimationFrame(reqId);
+        reqId = null;
+
+        elapsedTime = 0;
+        errors = 0;
+        
+        leftDot.x = config.leftTrackBaseX;
+        leftDot.y = config.playerBaseY;
+        leftDot.vx = 0;
+        leftDot.isOutOfBounds = false; leftDot.wasOutOfBounds = false;
+        
+        rightDot.x = config.rightTrackBaseX;
+        rightDot.y = config.playerBaseY;
+        rightDot.vx = 0;
+        rightDot.isOutOfBounds = false; rightDot.wasOutOfBounds = false;
+
+        overlay.style.display = 'flex'; 
+        overlay.style.backgroundColor = 'rgba(0, 0, 255, 0.85)'; 
+        startScreen.style.display = 'block';
+        countdownDisplay.style.display = 'none';
+        
+        timeVal.innerText = '00:00';
+        errorVal.innerText = '0';
+        
+        if (!keepLevel) {
+            currentLevel = 1;
+            levelSelect.value = "1";
+            levelVal.innerText = "1";
+        }
+
+        drawFrameStatic(); // Draw immediately to show blue BG and white tracks on load
+    }
+
+    function resetSimulation() {
+        resetToIdle(false);
+    }
+    
+    function changeLevel(newLevel) {
+        currentLevel = Math.max(1, Math.min(10, newLevel));
+        levelSelect.value = currentLevel.toString();
+        levelVal.innerText = currentLevel.toString();
+        resetToIdle(true);
+    }
+
+    function initCountdown() {
+        if(state === 'RUNNING' || state === 'COUNTDOWN') return;
+        
+        state = 'COUNTDOWN';
+        countdownValue = 3;
+        elapsedTime = 0;
+        errors = 0;
+        
+        leftDot.x = config.leftTrackBaseX;
+        leftDot.y = config.playerBaseY;
+        leftDot.vx = 0;
+        leftDot.isOutOfBounds = false; leftDot.wasOutOfBounds = false;
+        
+        rightDot.x = config.rightTrackBaseX;
+        rightDot.y = config.playerBaseY;
+        rightDot.vx = 0;
+        rightDot.isOutOfBounds = false; rightDot.wasOutOfBounds = false;
+
+        overlay.style.display = 'block'; 
+        overlay.style.backgroundColor = 'transparent'; // Remove blur to see static track
+        startScreen.style.display = 'none';
+        countdownDisplay.style.display = 'block';
+        countdownDisplay.innerText = countdownValue;
+        
+        timeVal.innerText = '00:00';
+        errorVal.innerText = '0';
+
+        lastTime = performance.now();
+        drawFrameStatic(); // Draw frozen state immediately
+        if (reqId) cancelAnimationFrame(reqId);
+        reqId = requestAnimationFrame(loop);
+    }
+
+    function startGame() {
+        state = 'RUNNING';
+        countdownDisplay.style.display = 'none';
+        overlay.style.display = 'none';
+        startTime = performance.now() - (elapsedTime * 1000); // Maintain any offset
+        lastTime = performance.now();
+    }
+
+    function stopGame() {
+        if (state !== 'RUNNING' && state !== 'COUNTDOWN') return;
+        state = 'ENDED';
+        if(reqId) cancelAnimationFrame(reqId);
+        reqId = null;
+    }
+
+    // Bind controls
+    startControlBtn.addEventListener('click', initCountdown);
+    stopControlBtn.addEventListener('click', stopGame);
+    resetControlBtn.addEventListener('click', resetSimulation);
+    
+    levelSelect.addEventListener('change', (e) => {
+        changeLevel(parseInt(e.target.value));
+    });
+
+    nextLevelBtn.addEventListener('click', () => {
+        changeLevel(currentLevel + 1);
+    });
+
+    // Main Simulation Loop
+    function loop(now) {
+        dt = (now - lastTime) / 1000;
+        if(dt > 0.1) dt = 0.016; // Prevent massive jumps if tab hidden
+        lastTime = now;
+
+        if (state === 'COUNTDOWN') {
+            countdownValue -= dt;
+            if (countdownValue > 0) {
+                countdownDisplay.innerText = Math.ceil(countdownValue);
+            } else if (countdownValue > -0.5) {
+                countdownDisplay.innerText = 'GO!';
+            } else {
+                startGame();
+            }
+            // Canvas is deliberately NOT redrawn here to keep tracks and cars completely frozen
+            reqId = requestAnimationFrame(loop);
+            return;
+        }
+
+        if (state !== 'RUNNING') return;
+
+        elapsedTime = (now - startTime) / 1000;
+
+        updatePhysics();
+        drawFrame();
+
+        // UI updates
+        timeVal.innerText = formatTime(elapsedTime);
+        errorVal.innerText = errors;
+
+        reqId = requestAnimationFrame(loop);
+    }
+
+    function updatePhysics() {
+        // Smooth Kinematic Velocity-Based Control
+        
+        // --- Left Dot Physics ---
+        if (keys.KeyA) {
+            leftDot.vx -= config.playerAccel * dt;
+        } else if (keys.KeyD) {
+            leftDot.vx += config.playerAccel * dt;
+        } else {
+            // Decelerate if no key pressed
+            leftDot.vx *= config.playerFriction;
+        }
+        
+        // Clamp Left Speed
+        leftDot.vx = Math.max(-config.playerMaxSpeed, Math.min(config.playerMaxSpeed, leftDot.vx));
+        leftDot.x += leftDot.vx * dt;
+
+        // --- Right Dot Physics ---
+        if (keys.ArrowLeft) {
+            rightDot.vx -= config.playerAccel * dt;
+        } else if (keys.ArrowRight) {
+            rightDot.vx += config.playerAccel * dt;
+        } else {
+            rightDot.vx *= config.playerFriction;
+        }
+        
+        // Clamp Right Speed
+        rightDot.vx = Math.max(-config.playerMaxSpeed, Math.min(config.playerMaxSpeed, rightDot.vx));
+        rightDot.x += rightDot.vx * dt;
+
+        // Hard boundaries - prevent leaving screen halves, zero out velocity on crash
+        if (leftDot.x < leftDot.radius) { leftDot.x = leftDot.radius; leftDot.vx = 0; }
+        if (leftDot.x > 400 - leftDot.radius) { leftDot.x = 400 - leftDot.radius; leftDot.vx = 0; }
+        
+        if (rightDot.x < 400 + rightDot.radius) { rightDot.x = 400 + rightDot.radius; rightDot.vx = 0; }
+        if (rightDot.x > 800 - rightDot.radius) { rightDot.x = 800 - rightDot.radius; rightDot.vx = 0; }
+
+        const speedMult = Math.pow(1.15, currentLevel - 1);
+        // Track time based on the ultra slow scroll speed
+        const trackVerticalTimePos = elapsedTime * ((config.scrollSpeed * speedMult) / 10); 
+
+        const idealWidth = Math.max(config.trackMinWidth, config.trackStartWidth - (elapsedTime * config.narrowingRate));
+
+        // Get absolute center positions of the track AT the player's y-level (collision line)
+        const lxCenter = config.leftTrackBaseX + getLeftTrackOffset(trackVerticalTimePos);
+        const rxCenter = config.rightTrackBaseX + getRightTrackOffset(trackVerticalTimePos);
+
+        const halfWidth = idealWidth / 2;
+        
+        // Out of Bounds Check (Is circle radius extending past the white half-width?)
+        leftDot.isOutOfBounds = Math.abs(leftDot.x - lxCenter) + leftDot.radius > halfWidth;
+        rightDot.isOutOfBounds = Math.abs(rightDot.x - rxCenter) + rightDot.radius > halfWidth;
+
+        // Accumulate Errors logic (trigger exactly once per breach)
+        if (leftDot.isOutOfBounds && !leftDot.wasOutOfBounds) errors++;
+        if (rightDot.isOutOfBounds && !rightDot.wasOutOfBounds) errors++;
+
+        leftDot.wasOutOfBounds = leftDot.isOutOfBounds;
+        rightDot.wasOutOfBounds = rightDot.isOutOfBounds;
+    }
+
+    function drawFrameStatic() {
+        elapsedTime = 0; // Force 0 for visual generation logic during countdown/idle
+        drawFrame();
+    }
+
+    function drawFrame() {
+        // 1. MUST EXPLICITLY DRAW BACKGROUND FIRST
+        // Clear background with solid Vibrant Deep Blue
+        ctx.fillStyle = '#0000FF'; 
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        const speedMult = Math.pow(1.15, currentLevel - 1);
+        const trackVerticalTimePos = elapsedTime * ((config.scrollSpeed * speedMult) / 10);
+        const idealWidth = Math.max(config.trackMinWidth, config.trackStartWidth - (elapsedTime * config.narrowingRate));
+
+        // 2. DRAW WIDE WHITE SMOOTH TRACKS OVER BLUE BG
+        drawTrack(config.leftTrackBaseX, getLeftTrackOffset, idealWidth, trackVerticalTimePos);
+        drawTrack(config.rightTrackBaseX, getRightTrackOffset, idealWidth, trackVerticalTimePos);
+
+        // 3. DRAW CARS ON TOP
+        drawVehicle(leftDot);
+        drawVehicle(rightDot);
+    }
+
+    // Render continuous smooth wavy white track stretching upwards
+    function drawTrack(baseX, offsetFunc, baseWidth, baseTimePos) {
+        ctx.beginPath();
+        const ptsLeft = [], ptsRight = [];
+        
+        // This scales screen Y pixels so tracks appear to shift down slowly
+        const lookaheadScale = 0.08; 
+        
+        // Generate points for the path (y=0 is top, playerBaseY is collision point)
+        for (let y = -20; y <= canvas.height + 20; y += 10) { 
+            const dy = config.playerBaseY - y;
+            // Lookup point corresponding to visually further 'up' the track
+            const timeSample = baseTimePos + (dy * lookaheadScale);
+            
+            const cx = baseX + offsetFunc(timeSample);
+            
+            // Perfectly smooth boundaries (no random jaggedness)
+            const wl = (baseWidth / 2);
+            const wr = (baseWidth / 2);
+
+            ptsLeft.push({ x: cx - wl, y: y });
+            ptsRight.push({ x: cx + wr, y: y });
+        }
+
+        if (ptsLeft.length === 0) return;
+
+        // Fill Tracks Solid White
+        ctx.fillStyle = '#FFFFFF';
+        ctx.beginPath();
+        ctx.moveTo(ptsLeft[0].x, ptsLeft[0].y);
+        for(let i=1; i<ptsLeft.length; i++) ctx.lineTo(ptsLeft[i].x, ptsLeft[i].y);
+        for(let i=ptsRight.length-1; i>=0; i--) ctx.lineTo(ptsRight[i].x, ptsRight[i].y);
+        ctx.closePath();
+        ctx.fill();
+    }
+
+    function drawVehicle(dot) {
+        const isError = dot.isOutOfBounds;
+        
+        // Cars are Grey (#808080) when safe, Bright Red (#FF0000) when colliding
+        ctx.fillStyle = isError ? '#FF0000' : '#808080'; 
+        ctx.beginPath();
+        ctx.arc(dot.x, dot.y, dot.radius, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Clean black outline
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    }
+    
+    // EXPLICIT initialization call immediately on load to prevent blank screen
+    resetSimulation(); 
+
+</script>
+</body>
+</html>
