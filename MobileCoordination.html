@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Mobile Bimanual Coordination Test</title>
+    <style>
+        :root {
+            --bg: #0000FF;
+            --surface: #ffffff;
+            --primary: #3b82f6;
+            --error: #FF0000;
+            --car: #808080;
+            --text: #333;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+        }
+
+        #topBar {
+            position: absolute;
+            top: 2%;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            z-index: 5;
+            width: 90%;
+            max-width: 800px;
+        }
+
+        /* The White Scoreboard Box */
+        .score-board {
+            background-color: var(--surface);
+            border-radius: 12px;
+            padding: 8px 30px;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            display: flex;
+            justify-content: space-around;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .stat-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .stat-label {
+            font-size: 14px;
+            font-weight: bold;
+            color: #666;
+            text-transform: uppercase;
+        }
+
+        .stat-value {
+            font-size: 28px;
+            font-family: monospace;
+            font-weight: bold;
+            color: var(--text);
+        }
+
+        .error-value {
+            color: var(--error);
+        }
+
+        .control-buttons {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            width: 100%;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            background-color: var(--primary);
+            color: white;
+            border: 2px solid rgba(255,255,255,0.2);
+            padding: 14px 20px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            text-transform: uppercase;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            flex: 1;
+            min-width: 80px;
+            text-align: center;
+            appearance: none;
+        }
+
+        .btn:active { background-color: #2563eb; transform: translateY(2px); }
+
+        .btn-stop { background-color: #ef4444; }
+        .btn-stop:active { background-color: #dc2626; }
+
+        .btn-reset { background-color: #6b7280; }
+        .btn-reset:active { background-color: #4b5563; }
+
+        #levelSelect {
+            flex: 1.5;
+            background-color: var(--surface);
+            color: var(--text);
+            border: 2px solid var(--primary);
+            outline: none;
+        }
+
+        #nextLevelBtn {
+            background-color: #f59e0b;
+            border-color: #f59e0b;
+        }
+
+        #canvasWrapper {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg);
+        }
+
+        /* Rotary Knob Invisible Touch Zones */
+        #touchZones {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 30%;
+            display: flex;
+            z-index: 20;
+        }
+
+        .touch-zone {
+            flex: 1;
+            height: 100%;
+            /* Border for visual debugging during development 
+            border: 2px dashed rgba(255,255,255,0.3); */
+        }
+        
+        #touchLeft {
+            border-right: 1px dashed rgba(255,255,255,0.2);
+        }
+
+        #overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 255, 0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 30;
+        }
+
+        h1 {
+            margin: 0 0 10px 0;
+            font-size: 32px;
+            font-weight: bold;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            text-align: center;
+        }
+
+        .instructions {
+            color: #e5e7eb;
+            line-height: 1.6;
+            text-align: center;
+            max-width: 80%;
+            margin-bottom: 30px;
+            font-size: 16px;
+        }
+
+        .countdown {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 120px;
+            font-family: monospace;
+            font-weight: bold;
+            color: white;
+            text-shadow: 0 0 40px rgba(255, 255, 255, 0.8), 4px 4px 0px rgba(0,0,0,0.3);
+            z-index: 40;
+            pointer-events: none;
+        }
+
+        /* Hint text to show users where to touch */
+        .knob-hint {
+            position: absolute;
+            bottom: 10%;
+            width: 100%;
+            display: flex;
+            justify-content: space-around;
+            pointer-events: none;
+            color: rgba(255, 255, 255, 0.6);
+            font-weight: bold;
+            font-size: 20px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        
+        @media screen and (orientation: portrait) {
+            #startScreen h1::after {
+                content: " (Please rotate to Landscape)";
+                display: block;
+                font-size: 16px;
+                color: #f59e0b;
+                margin-top: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="topBar">
+        <div class="score-board">
+            <div class="stat-group">
+                <span class="stat-label">Level</span>
+                <span class="stat-value" id="levelVal">1</span>
+            </div>
+            <div class="stat-group">
+                <span class="stat-label">Timer</span>
+                <span class="stat-value" id="timeVal">00:00</span>
+            </div>
+            <div class="stat-group">
+                <span class="stat-label">Errors</span>
+                <span class="stat-value error-value" id="errorVal">0</span>
+            </div>
+        </div>
+        
+        <div class="control-buttons">
+            <select id="levelSelect" class="btn">
+                <option value="1">Level 1</option>
+                <option value="2">Level 2</option>
+                <option value="3">Level 3</option>
+                <option value="4">Level 4</option>
+                <option value="5">Level 5</option>
+                <option value="6">Level 6</option>
+                <option value="7">Level 7</option>
+                <option value="8">Level 8</option>
+                <option value="9">Level 9</option>
+                <option value="10">Level 10</option>
+            </select>
+            <button id="nextLevelBtn" class="btn">Next Level</button>
+            <button id="startControlBtn" class="btn">Start</button>
+            <button id="stopControlBtn" class="btn btn-stop">Stop</button>
+            <button id="resetControlBtn" class="btn btn-reset">Reset</button>
+        </div>
+    </div>
+
+    <div id="canvasWrapper">
+        <canvas id="simCanvas"></canvas>
+    </div>
+    
+    <!-- Rotary Knob Touch Zones -->
+    <div id="touchZones">
+        <div id="touchLeft" class="touch-zone"></div>
+        <div id="touchRight" class="touch-zone"></div>
+        
+        <div class="knob-hint">
+            <span>Slide Left/Right</span>
+            <span>Slide Left/Right</span>
+        </div>
+    </div>
+    
+    <div id="countdownDisplay" class="countdown">3</div>
+    
+    <div id="overlay">
+        <div id="startScreen">
+            <h1>Mobile Psychomotor Coordination</h1>
+            <p class="instructions">
+                Simulate the physical rotary knobs. Touch your thumbs to the bottom left and right zones. 
+                <strong>Slide your thumbs left or right to move the cars.</strong> 
+                The distance you slide controls the speed. Release to instantly stop.
+            </p>
+        </div>
+    </div>
+
+<script>
+    const canvas = document.getElementById('simCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    // UI Elements
+    const levelVal = document.getElementById('levelVal');
+    const timeVal = document.getElementById('timeVal');
+    const errorVal = document.getElementById('errorVal');
+    const levelSelect = document.getElementById('levelSelect');
+    const nextLevelBtn = document.getElementById('nextLevelBtn');
+    const startControlBtn = document.getElementById('startControlBtn');
+    const stopControlBtn = document.getElementById('stopControlBtn');
+    const resetControlBtn = document.getElementById('resetControlBtn');
+    
+    const overlay = document.getElementById('overlay');
+    const startScreen = document.getElementById('startScreen');
+    const countdownDisplay = document.getElementById('countdownDisplay');
+    
+    // Touch Zones
+    const touchLeftZone = document.getElementById('touchLeft');
+    const touchRightZone = document.getElementById('touchRight');
+    
+    // Core state
+    let state = 'IDLE'; // IDLE, COUNTDOWN, RUNNING, ENDED
+    let currentLevel = 1;
+    let countdownValue = 3;
+    let reqId = null;
+    let startTime = 0;
+    let lastTime = 0;
+    let elapsedTime = 0;
+    let errors = 0;
+    let dt = 0;
+
+    // Configuration constraints (Responsive)
+    const config = {
+        playerBaseY: 0,            // Calculated dynamically
+        playerMaxSpeed: 400,       // Upper limit for touch slide
+        trackStartWidth: 0,        // Calculated dynamically
+        trackMinWidth: 0,          // Calculated dynamically
+        narrowingRate: 0.3,        // Narrows slowly over time
+        leftTrackBaseX: 0,         // Calculated
+        rightTrackBaseX: 0,        // Calculated
+        scrollSpeed: 16.0,         // Base vertical descent pace
+        carRadius: 0,              // Calculated dynamically
+        touchSensitivity: 3.5      // multiplier for sliding distance -> velocity
+    };
+
+    // Actors (Circles)
+    const leftDot = { x: 0, y: 0, vx: 0, radius: 0, isOutOfBounds: false, wasOutOfBounds: false };
+    const rightDot = { x: 0, y: 0, vx: 0, radius: 0, isOutOfBounds: false, wasOutOfBounds: false };
+
+    // Responsive Setup
+    function resize() {
+        // Fix internal resolution to layout resolution
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        
+        const w = canvas.width;
+        const h = canvas.height;
+        
+        config.playerBaseY = h * 0.65; // Place cars just above the touch bottom 30% area
+        config.leftTrackBaseX = w * 0.25;
+        config.rightTrackBaseX = w * 0.75;
+        
+        config.trackStartWidth = w * 0.22; // Responsive tracks
+        config.trackMinWidth = w * 0.15;
+        
+        config.carRadius = Math.max(15, w * 0.025); 
+
+        // Update positions if IDLE to recenter
+        if(state === 'IDLE' || state === 'COUNTDOWN') {
+            leftDot.x = config.leftTrackBaseX;
+            leftDot.y = config.playerBaseY;
+            leftDot.radius = config.carRadius;
+            
+            rightDot.x = config.rightTrackBaseX;
+            rightDot.y = config.playerBaseY;
+            rightDot.radius = config.carRadius;
+            
+            if(state === 'IDLE') drawFrameStatic();
+        }
+    }
+    
+    window.addEventListener('resize', resize);
+
+    // Rotary Knob Touch Logic
+    const touchState = {
+        left: { active: false, startX: 0, currentDeltaX: 0, id: null },
+        right: { active: false, startX: 0, currentDeltaX: 0, id: null }
+    };
+
+    function handleTouchStart(e, side) {
+        e.preventDefault(); // Prevent scrolling
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            const touch = e.changedTouches[i];
+            if (!touchState[side].active) {
+                touchState[side].active = true;
+                touchState[side].id = touch.identifier;
+                touchState[side].startX = touch.clientX;
+                touchState[side].currentDeltaX = 0;
+            }
+        }
+    }
+
+    function handleTouchMove(e, side) {
+        e.preventDefault();
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            const touch = e.changedTouches[i];
+            if (touchState[side].active && touch.identifier === touchState[side].id) {
+                // Calculate sliding distance from initial touch down point
+                touchState[side].currentDeltaX = touch.clientX - touchState[side].startX;
+            }
+        }
+    }
+
+    function handleTouchEnd(e, side) {
+        e.preventDefault();
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            const touch = e.changedTouches[i];
+            if (touchState[side].active && touch.identifier === touchState[side].id) {
+                touchState[side].active = false;
+                touchState[side].id = null;
+                touchState[side].currentDeltaX = 0;
+            }
+        }
+    }
+
+    // Bind Touch Events
+    touchLeftZone.addEventListener('touchstart', (e) => handleTouchStart(e, 'left'), {passive: false});
+    touchLeftZone.addEventListener('touchmove', (e) => handleTouchMove(e, 'left'), {passive: false});
+    touchLeftZone.addEventListener('touchend', (e) => handleTouchEnd(e, 'left'), {passive: false});
+    touchLeftZone.addEventListener('touchcancel', (e) => handleTouchEnd(e, 'left'), {passive: false});
+
+    touchRightZone.addEventListener('touchstart', (e) => handleTouchStart(e, 'right'), {passive: false});
+    touchRightZone.addEventListener('touchmove', (e) => handleTouchMove(e, 'right'), {passive: false});
+    touchRightZone.addEventListener('touchend', (e) => handleTouchEnd(e, 'right'), {passive: false});
+    touchRightZone.addEventListener('touchcancel', (e) => handleTouchEnd(e, 'right'), {passive: false});
+
+
+    // Format time to MM:SS
+    function formatTime(seconds) {
+        const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+        const s = Math.floor(seconds % 60).toString().padStart(2, '0');
+        return `${m}:${s}`;
+    }
+
+    // Smooth, low-frequency layered sine waves for organic drifting
+    function getLeftTrackOffset(timeSecs) {
+        const freqMult = Math.pow(1.15, currentLevel - 1);
+        const t = timeSecs * freqMult;
+        // Scale offset size based on screen width
+        const ampScale = canvas.width / 800;
+        return (Math.sin(t * 0.15) * 60 
+             + Math.sin(t * 0.3 + 2) * 45
+             + Math.cos(t * 0.4) * 25) * ampScale;
+    }
+
+    function getRightTrackOffset(timeSecs) {
+        const freqMult = Math.pow(1.15, currentLevel - 1);
+        const t = timeSecs * freqMult;
+        const ampScale = canvas.width / 800;
+        return (Math.sin(t * 0.12 + 5) * 65 
+             + Math.cos(t * 0.25 + 1) * 40
+             + Math.sin(t * 0.45) * 20) * ampScale;
+    }
+
+    function resetToIdle(keepLevel = false) {
+        state = 'IDLE';
+        if (reqId) cancelAnimationFrame(reqId);
+        reqId = null;
+
+        elapsedTime = 0;
+        errors = 0;
+        
+        leftDot.x = config.leftTrackBaseX;
+        leftDot.y = config.playerBaseY;
+        leftDot.vx = 0;
+        leftDot.isOutOfBounds = false; leftDot.wasOutOfBounds = false;
+        
+        rightDot.x = config.rightTrackBaseX;
+        rightDot.y = config.playerBaseY;
+        rightDot.vx = 0;
+        rightDot.isOutOfBounds = false; rightDot.wasOutOfBounds = false;
+
+        // Reset touch
+        touchState.left.active = false; touchState.left.currentDeltaX = 0;
+        touchState.right.active = false; touchState.right.currentDeltaX = 0;
+
+        overlay.style.display = 'flex'; 
+        overlay.style.backgroundColor = 'rgba(0, 0, 255, 0.85)'; 
+        startScreen.style.display = 'block';
+        countdownDisplay.style.display = 'none';
+        
+        timeVal.innerText = '00:00';
+        errorVal.innerText = '0';
+        
+        if (!keepLevel) {
+            currentLevel = 1;
+            levelSelect.value = "1";
+            levelVal.innerText = "1";
+        }
+
+        drawFrameStatic();
+    }
+
+    function resetSimulation() {
+        resetToIdle(false);
+    }
+    
+    function changeLevel(newLevel) {
+        currentLevel = Math.max(1, Math.min(10, newLevel));
+        levelSelect.value = currentLevel.toString();
+        levelVal.innerText = currentLevel.toString();
+        resetToIdle(true);
+    }
+
+    function initCountdown() {
+        if(state === 'RUNNING' || state === 'COUNTDOWN') return;
+        
+        state = 'COUNTDOWN';
+        countdownValue = 3;
+        elapsedTime = 0;
+        errors = 0;
+        
+        leftDot.x = config.leftTrackBaseX;
+        leftDot.y = config.playerBaseY;
+        leftDot.vx = 0;
+        leftDot.isOutOfBounds = false; leftDot.wasOutOfBounds = false;
+        
+        rightDot.x = config.rightTrackBaseX;
+        rightDot.y = config.playerBaseY;
+        rightDot.vx = 0;
+        rightDot.isOutOfBounds = false; rightDot.wasOutOfBounds = false;
+
+        overlay.style.display = 'block'; 
+        overlay.style.backgroundColor = 'transparent'; 
+        startScreen.style.display = 'none';
+        countdownDisplay.style.display = 'block';
+        countdownDisplay.innerText = countdownValue;
+        
+        timeVal.innerText = '00:00';
+        errorVal.innerText = '0';
+
+        lastTime = performance.now();
+        drawFrameStatic(); // Draw frozen state immediately
+        if (reqId) cancelAnimationFrame(reqId);
+        reqId = requestAnimationFrame(loop);
+    }
+
+    function startGame() {
+        state = 'RUNNING';
+        countdownDisplay.style.display = 'none';
+        overlay.style.display = 'none';
+        startTime = performance.now() - (elapsedTime * 1000); // Maintain any offset
+        lastTime = performance.now();
+    }
+
+    function stopGame() {
+        if (state !== 'RUNNING' && state !== 'COUNTDOWN') return;
+        state = 'ENDED';
+        if(reqId) cancelAnimationFrame(reqId);
+        reqId = null;
+    }
+
+    // Bind controls
+    startControlBtn.addEventListener('click', initCountdown);
+    startControlBtn.addEventListener('touchstart', initCountdown, {passive: true});
+    
+    stopControlBtn.addEventListener('click', stopGame);
+    stopControlBtn.addEventListener('touchstart', stopGame, {passive: true});
+    
+    resetControlBtn.addEventListener('click', resetSimulation);
+    resetControlBtn.addEventListener('touchstart', resetSimulation, {passive: true});
+    
+    levelSelect.addEventListener('change', (e) => {
+        changeLevel(parseInt(e.target.value));
+    });
+
+    nextLevelBtn.addEventListener('click', () => {
+        changeLevel(currentLevel + 1);
+    });
+    nextLevelBtn.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        changeLevel(currentLevel + 1);
+    }, {passive: false});
+
+    // Main Simulation Loop
+    function loop(now) {
+        dt = (now - lastTime) / 1000;
+        if(dt > 0.1) dt = 0.016; // Prevent massive jumps
+        lastTime = now;
+
+        if (state === 'COUNTDOWN') {
+            countdownValue -= dt;
+            if (countdownValue > 0) {
+                countdownDisplay.innerText = Math.ceil(countdownValue);
+            } else if (countdownValue > -0.5) {
+                countdownDisplay.innerText = 'GO!';
+            } else {
+                startGame();
+            }
+            reqId = requestAnimationFrame(loop);
+            return;
+        }
+
+        if (state !== 'RUNNING') return;
+
+        elapsedTime = (now - startTime) / 1000;
+
+        updatePhysics();
+        drawFrame();
+
+        // UI updates
+        timeVal.innerText = formatTime(elapsedTime);
+        errorVal.innerText = errors;
+
+        reqId = requestAnimationFrame(loop);
+    }
+
+    function updatePhysics() {
+        // --- Rotary Knob Touch Physics ---
+        
+        // Left Velocity Proportional to sliding distance
+        if (touchState.left.active) {
+            leftDot.vx = touchState.left.currentDeltaX * config.touchSensitivity;
+        } else {
+            leftDot.vx = 0; // Immediate stop on release
+        }
+        
+        // Right Velocity Proportional to sliding distance
+        if (touchState.right.active) {
+            rightDot.vx = touchState.right.currentDeltaX * config.touchSensitivity;
+        } else {
+            rightDot.vx = 0; // Immediate stop on release
+        }
+        
+        // Clamp Speeds
+        leftDot.vx = Math.max(-config.playerMaxSpeed, Math.min(config.playerMaxSpeed, leftDot.vx));
+        rightDot.vx = Math.max(-config.playerMaxSpeed, Math.min(config.playerMaxSpeed, rightDot.vx));
+        
+        // Apply velocity
+        leftDot.x += leftDot.vx * dt;
+        rightDot.x += rightDot.vx * dt;
+
+        // Hard boundaries - prevent leaving screen halves
+        const halfScreen = canvas.width / 2;
+        if (leftDot.x < leftDot.radius) { leftDot.x = leftDot.radius; leftDot.vx = 0; }
+        if (leftDot.x > halfScreen - leftDot.radius) { leftDot.x = halfScreen - leftDot.radius; leftDot.vx = 0; }
+        
+        if (rightDot.x < halfScreen + rightDot.radius) { rightDot.x = halfScreen + rightDot.radius; rightDot.vx = 0; }
+        if (rightDot.x > canvas.width - rightDot.radius) { rightDot.x = canvas.width - rightDot.radius; rightDot.vx = 0; }
+
+        const speedMult = Math.pow(1.15, currentLevel - 1);
+        const trackVerticalTimePos = elapsedTime * ((config.scrollSpeed * speedMult) / 10); 
+
+        const idealWidth = Math.max(config.trackMinWidth, config.trackStartWidth - (elapsedTime * config.narrowingRate));
+
+        // Center calculation
+        const lxCenter = config.leftTrackBaseX + getLeftTrackOffset(trackVerticalTimePos);
+        const rxCenter = config.rightTrackBaseX + getRightTrackOffset(trackVerticalTimePos);
+
+        const halfWidth = idealWidth / 2;
+        
+        leftDot.isOutOfBounds = Math.abs(leftDot.x - lxCenter) + leftDot.radius > halfWidth;
+        rightDot.isOutOfBounds = Math.abs(rightDot.x - rxCenter) + rightDot.radius > halfWidth;
+
+        // Accumulate Errors 
+        if (leftDot.isOutOfBounds && !leftDot.wasOutOfBounds) errors++;
+        if (rightDot.isOutOfBounds && !rightDot.wasOutOfBounds) errors++;
+
+        leftDot.wasOutOfBounds = leftDot.isOutOfBounds;
+        rightDot.wasOutOfBounds = rightDot.isOutOfBounds;
+    }
+
+    function drawFrameStatic() {
+        elapsedTime = 0; 
+        drawFrame();
+    }
+
+    function drawFrame() {
+        // Clear background with solid Vibrant Deep Blue
+        ctx.fillStyle = '#0000FF'; 
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        const speedMult = Math.pow(1.15, currentLevel - 1);
+        const trackVerticalTimePos = elapsedTime * ((config.scrollSpeed * speedMult) / 10);
+        const idealWidth = Math.max(config.trackMinWidth, config.trackStartWidth - (elapsedTime * config.narrowingRate));
+
+        // DRAW WIDE WHITE SMOOTH TRACKS
+        drawTrack(config.leftTrackBaseX, getLeftTrackOffset, idealWidth, trackVerticalTimePos);
+        drawTrack(config.rightTrackBaseX, getRightTrackOffset, idealWidth, trackVerticalTimePos);
+
+        // DRAW CARS
+        drawVehicle(leftDot);
+        drawVehicle(rightDot);
+    }
+
+    // Render continuous smooth wavy white track
+    function drawTrack(baseX, offsetFunc, baseWidth, baseTimePos) {
+        ctx.beginPath();
+        const ptsLeft = [], ptsRight = [];
+        
+        const lookaheadScale = 0.08; 
+        
+        for (let y = -20; y <= canvas.height + 20; y += 10) { 
+            const dy = config.playerBaseY - y;
+            const timeSample = baseTimePos + (dy * lookaheadScale);
+            
+            const cx = baseX + offsetFunc(timeSample);
+            
+            const wl = (baseWidth / 2);
+            const wr = (baseWidth / 2);
+
+            ptsLeft.push({ x: cx - wl, y: y });
+            ptsRight.push({ x: cx + wr, y: y });
+        }
+
+        if (ptsLeft.length === 0) return;
+
+        // Fill Tracks Solid White
+        ctx.fillStyle = '#FFFFFF';
+        ctx.beginPath();
+        ctx.moveTo(ptsLeft[0].x, ptsLeft[0].y);
+        for(let i=1; i<ptsLeft.length; i++) ctx.lineTo(ptsLeft[i].x, ptsLeft[i].y);
+        for(let i=ptsRight.length-1; i>=0; i--) ctx.lineTo(ptsRight[i].x, ptsRight[i].y);
+        ctx.closePath();
+        ctx.fill();
+    }
+
+    function drawVehicle(dot) {
+        const isError = dot.isOutOfBounds;
+        
+        ctx.fillStyle = isError ? '#FF0000' : '#808080'; 
+        ctx.beginPath();
+        ctx.arc(dot.x, dot.y, dot.radius, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    }
+    
+    // Initial Resize & Start
+    resize();
+
+</script>
+</body>
+</html>
